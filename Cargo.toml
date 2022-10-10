@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "plugin-test",
+    "dyn-plugin-test",
+]
+default-members = [
+    "plugin-test",
+]

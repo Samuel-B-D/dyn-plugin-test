@@ -1,0 +1,10 @@
+[package]
+name = "dyn-plugin-test"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+plugin-test = { path = "../plugin-test" }
