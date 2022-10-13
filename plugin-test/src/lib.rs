@@ -10,27 +10,18 @@ pub trait Handler: Any + Debug {
     fn on_drop(&mut self);
 }
 
-pub type HandlerConstructor = unsafe fn() -> *mut HandlerWrapper;
-
-pub struct HandlerWrapper(pub *mut dyn Handler);
+pub type HandlerConstructor = unsafe fn() -> *mut Box<dyn Handler>;
 
 #[macro_export]
 macro_rules! declare_handler {
     ($plugin_type:ty, $constructor:path) => {
         #[no_mangle]
-        pub extern "C" fn _create_handler() -> *mut $crate::HandlerWrapper {
+        pub extern "C" fn _create_handler() -> *mut Box<dyn $crate::Handler> {
             // make sure the constructor is the correct type.
             let constructor: unsafe fn() -> $plugin_type = $constructor;
 
-            let boxed_handler = unsafe { Box::new(constructor()) };
-            println!("Created Handler at: {:p}", boxed_handler);
-            let handler_ptr = Box::into_raw(boxed_handler);
-            println!("Raw handler ptr at: {:p}", handler_ptr);
-
-            let wrapper = Box::new($crate::HandlerWrapper(handler_ptr));
-            Box::into_raw(wrapper)
-
-            // handler_ptr
+            let double_boxed_handler: Box<Box<dyn $crate::Handler>> = unsafe { Box::new(Box::new(constructor())) };
+            Box::into_raw(double_boxed_handler)
         }
     };
 }
@@ -108,16 +99,12 @@ impl App {
             self.loader = Some(loader);
         }
         let loader = self.loader.as_mut().expect("Was just initialized. This is a bug.");
+
         let handler_constructor: Symbol<HandlerConstructor> = unsafe { loader.get(b"_create_handler")? };
-        println!("Loaded handler constructor");
-        let handler_wrapper = unsafe { Box::from_raw(handler_constructor()) };
-        let handler_ptr = handler_wrapper.0;
-        println!("Dynamically created handler at: {:p}", handler_ptr);
-        // let handler_ptr = unsafe { handler_constructor() };
-        // println!("Dynamically created handler at: {:p}", handler_ptr);
-        let handler = unsafe { Box::into_pin(Box::from_raw(handler_ptr)) };
-        println!("Re-boxed handler at: {:p}", handler);
-        self.handler = Some(handler);
+
+        let double_boxed_handler = unsafe { Box::from_raw(handler_constructor()) };
+        let pinned_handler = Box::into_pin(*double_boxed_handler);
+        self.handler = Some(pinned_handler);
         Ok(())
     }
 
